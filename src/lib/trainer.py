@@ -146,11 +146,11 @@ class Trainer(object):
       for k in batch:
         if k != 'meta':
           batch[k] = batch[k].to(device=opt.device, non_blocking=True)  
-        if iter_id % 200 == 0:
-          image = batch['image'][0, ...].detach().cpu().numpy()
-          experiment.log_image(image[:, :, ::-1], name=phase,
-                               image_channels="first",
-                               step=((epoch-1)*len(data_loader))+iter_id)
+      if iter_id % 200 == 0:
+        image = batch['image'][0, ...].detach().cpu().numpy()
+        experiment.log_image(image[::-1, :, :], name=phase,
+                              image_channels="first",
+                              step=((epoch-1)*len(data_loader))+iter_id)
       output, loss, loss_stats = model_with_loss(batch)
       loss = loss.mean()
       if phase == 'train':

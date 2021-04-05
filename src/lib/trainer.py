@@ -120,7 +120,7 @@ class Trainer(object):
         if isinstance(v, torch.Tensor):
           state[k] = v.to(device=device, non_blocking=True)
 
-  def run_epoch(self, phase, epoch, data_loader):
+  def run_epoch(self, phase, epoch, data_loader, experiment):
     model_with_loss = self.model_with_loss
     if phase == 'train':
       model_with_loss.train()
@@ -145,7 +145,12 @@ class Trainer(object):
 
       for k in batch:
         if k != 'meta':
-          batch[k] = batch[k].to(device=opt.device, non_blocking=True)   
+          batch[k] = batch[k].to(device=opt.device, non_blocking=True)  
+        if iter_id % 200 == 0:
+          image = batch['image'][0, ...].detach().cpu().numpy()
+          experiment.log_image(image[:, :, ::-1], name=phase,
+                               image_channels="first",
+                               step=((epoch-1)*len(data_loader))+iter_id)
       output, loss, loss_stats = model_with_loss(batch)
       loss = loss.mean()
       if phase == 'train':
@@ -172,7 +177,11 @@ class Trainer(object):
       
       if opt.debug > 0:
         self.debug(batch, output, iter_id, dataset=data_loader.dataset)
-      
+      for k,v in avg_loss_stats.items():
+        experiment.log_metric('{}_{}'.format(phase,k), v.avg,
+                              step=((epoch-1)*len(data_loader))+iter_id,
+                              epoch=epoch)
+                              
       del output, loss, loss_stats
     
     bar.finish()
@@ -310,8 +319,8 @@ class Trainer(object):
       else:
         debugger.show_all_imgs(pause=True)
   
-  def val(self, epoch, data_loader):
-    return self.run_epoch('val', epoch, data_loader)
+  def val(self, epoch, data_loader, experiment):
+    return self.run_epoch('val', epoch, data_loader, experiment)
 
-  def train(self, epoch, data_loader):
-    return self.run_epoch('train', epoch, data_loader)
+  def train(self, epoch, data_loader, experiment):
+    return self.run_epoch('train', epoch, data_loader, experiment)

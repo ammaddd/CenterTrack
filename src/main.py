@@ -4,6 +4,7 @@ from __future__ import print_function
 
 import _init_paths
 import os
+from comet_ml import Experiment
 
 import torch
 import torch.utils.data
@@ -26,11 +27,15 @@ def get_optimizer(opt, model):
   return optimizer
 
 def main(opt):
+  experiment = Experiment()
   torch.manual_seed(opt.seed)
   torch.backends.cudnn.benchmark = not opt.not_cuda_benchmark and not opt.test
   Dataset = get_dataset(opt.dataset)
   opt = opts().update_dataset_info_and_set_heads(opt, Dataset)
   print(opt)
+  experiment.log_others(vars(opt))
+  experiment.log_code('./lib/model/networks/resdcn.py')
+  experiment.log_code('./lib/model/networks/dla.py')
   if not opt.not_set_cuda_env:
     os.environ['CUDA_VISIBLE_DEVICES'] = opt.gpus_str
   opt.device = torch.device('cuda' if opt.gpus[0] >= 0 else 'cpu')
@@ -67,7 +72,7 @@ def main(opt):
   print('Starting training...')
   for epoch in range(start_epoch + 1, opt.num_epochs + 1):
     mark = epoch if opt.save_all else 'last'
-    log_dict_train, _ = trainer.train(epoch, train_loader)
+    log_dict_train, _ = trainer.train(epoch, train_loader, experiment)
     logger.write('epoch: {} |'.format(epoch))
     for k, v in log_dict_train.items():
       logger.scalar_summary('train_{}'.format(k), v, epoch)
@@ -75,8 +80,10 @@ def main(opt):
     if opt.val_intervals > 0 and epoch % opt.val_intervals == 0:
       save_model(os.path.join(opt.save_dir, 'model_{}.pth'.format(mark)), 
                  epoch, model, optimizer)
+      experiment.log_model("CenterTrack", os.path.join(opt.save_dir,
+                           'model_{}.pth'.format(mark)))
       with torch.no_grad():
-        log_dict_val, preds = trainer.val(epoch, val_loader)
+        log_dict_val, preds = trainer.val(epoch, val_loader, experiment)
         if opt.eval_val:
           val_loader.dataset.run_eval(preds, opt.save_dir)
       for k, v in log_dict_val.items():
@@ -85,12 +92,17 @@ def main(opt):
     else:
       save_model(os.path.join(opt.save_dir, 'model_last.pth'), 
                  epoch, model, optimizer)
+      experiment.log_model("CenterTrack", os.path.join(opt.save_dir,
+                           'model_last.pth'))
     logger.write('\n')
     if epoch in opt.save_point:
       save_model(os.path.join(opt.save_dir, 'model_{}.pth'.format(epoch)), 
                  epoch, model, optimizer)
+      experiment.log_model("CenterTrack", os.path.join(opt.save_dir,
+                           'model_{}.pth'.format(epoch)))
     if epoch in opt.lr_step:
       lr = opt.lr * (0.1 ** (opt.lr_step.index(epoch) + 1))
+      experiment.log_parameter("learning_rate", lr, epoch=epoch)
       print('Drop LR to', lr)
       for param_group in optimizer.param_groups:
           param_group['lr'] = lr
